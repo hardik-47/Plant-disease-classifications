@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Model files
+*.h5
+*.hdf5
+*.pb
+labels.json
+
+# Datasets
+dataset/
+*.zip
+*.tar.gz
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Colab / Kaggle
+kaggle.json
+
+# Node (for frontend)
+node_modules/
+dist/
+
+# IDE files
+.vscode/
+.idea/
