@@ -20,15 +20,28 @@ async function uploadImage() {
     let formData = new FormData();
     formData.append("file", file);
 
-    // Change the URL to your backend's deployed link when live
-    let response = await fetch("http://127.0.0.1:8000/predict", {
-        method: "POST",
-        body: formData
-    });
+    document.getElementById("result").innerHTML = "<p>Processing...</p>";
 
-    let result = await response.json();
+    try {
+        let response = await fetch("http://127.0.0.1:8000/predict", {
+            method: "POST",
+            body: formData
+        });
 
-    document.getElementById("result").innerHTML =
-        `<p><strong>Disease:</strong> ${result.prediction}</p>
-         <p><strong>Confidence:</strong> ${result.confidence}%</p>`;
+        if (!response.ok) {
+            throw new Error("Server error: " + response.statusText);
+        }
+        
+        let result = await response.json();
+
+        console.log(result);
+
+
+        document.getElementById("result").innerHTML =
+            `<p><strong>Disease:</strong> ${result.prediction}</p>
+             <p><strong>Confidence:</strong> ${(result.confidence * 100).toFixed(2)}%</p>`;
+    } catch (error) {
+        document.getElementById("result").innerHTML =
+            `<p style="color:red;">Error: ${error.message}</p>`;
+    }
 }

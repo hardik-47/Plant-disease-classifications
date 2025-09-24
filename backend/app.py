@@ -1,62 +1,107 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import tensorflow as tf
-import numpy as np
 from PIL import Image
+import numpy as np
+import tensorflow as tf
 import json
-import os
+import uvicorn
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
-# Create FastAPI app
+# -------------------------
+# 1. Initialize FastAPI app
+# -------------------------
 app = FastAPI()
 
-# Allow CORS for frontend communication
+# Enable CORS (so frontend JS can call API)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to frontend domain in production
+    allow_origins=["*"],  # you can restrict to your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Paths
-MODEL_PATH = "model/plant_disease_model.h5"
-LABELS_PATH = "model/labels.json"
-UPLOAD_FOLDER = "uploads"
+# -------------------------
+# 2. Load Model + Class Names
+# -------------------------
+MODEL_PATH = "model/plant_disease_model2.keras"   # use .h5 (what you saved)
+CLASS_NAMES_PATH = "class_names2.json"
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Load model and labels
 model = tf.keras.models.load_model(MODEL_PATH)
-with open(LABELS_PATH) as f:
-    labels = json.load(f)
 
-# Function to preprocess image
-def preprocess_image(image_path):
-    img = Image.open(image_path).convert("RGB").resize((224, 224))
-    img_array = np.array(img) / 255.0  # Normalize
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
+with open(CLASS_NAMES_PATH, "r") as f:
+    class_names = json.load(f)
 
+IMG_SIZE = 224  # MobileNetV2 input size
+
+# -------------------------
+# 3. Preprocessing Function
+# -------------------------
+def preprocess_image(image: Image.Image):
+    # Convert to RGB (ensure 3 channels)
+    image = image.convert("RGB")
+
+    # Convert to tensor
+    img = tf.convert_to_tensor(np.array(image), dtype=tf.float32)
+
+    # Resize to (224, 224)
+    img = tf.image.resize(img, [IMG_SIZE, IMG_SIZE])
+
+    # Add batch dimension
+    img = tf.expand_dims(img, axis=0)
+
+    # Apply same preprocessing as training
+    img = preprocess_input(img)
+    return img
+
+
+# -------------------------
+# 4. Prediction Endpoint
+# -------------------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # Save uploaded image temporarily
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
+    try:
+        # Load image
+        image = Image.open(file.file)
+        
+        # Preprocess
+        img = preprocess_image(image)
+        
+        # Predict
+        preds = model.predict(img)
+        class_id = int(np.argmax(preds[0]))
+        confidence = float(preds[0][class_id])
 
-    # Preprocess image
-    img_array = preprocess_image(file_path)
+        # preds = model.predict(img)
+        print("Raw Predictions:", preds)        # see all probabilities
+        print("Sum of probs:", np.sum(preds))   # should ≈ 1
 
-    # Predict
-    predictions = model.predict(img_array)
-    class_idx = np.argmax(predictions)
-    confidence = float(np.max(predictions))
+        
+        return JSONResponse({
+            "prediction": class_names[class_id],
+            "confidence": round(confidence, 2)
+        })
+    
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
-    return {
-        "prediction": labels[str(class_idx)],
-        "confidence": round(confidence * 100, 2)
-    }
+# -------------------------
+# 5. Run the app (for local dev)
+# -------------------------
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
-@app.get("/")
-def root():
-    return {"message": "Plant Disease Classification API is running"}
+
+
+
+
+# from google.colab import drive
+# drive.mount('/content/drive')
+# dataset = tf.keras.preprocessing.image_dataset_from_directory(
+#     "/content/drive/MyDrive/Plant",
+#     seed=123,
+#     shuffle=True,
+#     image_size=(IMAGE_SIZE,IMAGE_SIZE),
+#     batch_size=BATCH_SIZE
+# )
